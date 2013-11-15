@@ -1,2 +1,7 @@
 {
+  "requests": [
+    {"url": "http://localhost:6666", "body": "hello"}
+  ],
+  "qps": 100,
+  "duration_seconds": 3
 }
