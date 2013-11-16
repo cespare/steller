@@ -199,8 +199,8 @@ func main() {
 	transport := &http.Transport{
 		// Don't automatically enable gzip compression
 		DisableCompression:    true,
-		MaxIdleConnsPerHost:   10,               // TODO: tunable
-		ResponseHeaderTimeout: 10 * time.Second, // TODO: tunable
+		MaxIdleConnsPerHost:   conf.MaxConcurrent, // TODO: separately tunable?
+		ResponseHeaderTimeout: 10 * time.Second,   // TODO: tunable
 	}
 
 	params := &TestParams{

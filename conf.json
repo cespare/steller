@@ -2,7 +2,7 @@
   "requests": [
     {"url": "http://localhost:6666"}
   ],
-  "target_qps": 20000,
-  "duration_seconds": 10,
-  "max_concurrent": 100000
+  "target_qps": 1000,
+  "duration_seconds": 5,
+  "max_concurrent": 10000
 }
