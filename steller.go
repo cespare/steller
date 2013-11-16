@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -10,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"sync"
-	"text/template"
 	"time"
 )
 
@@ -33,8 +31,9 @@ type Request struct {
 
 type Conf struct {
 	Requests        []*Request
-	QPS             int
+	TargetQPS       int `json:"target_qps"`
 	DurationSeconds int `json:"duration_seconds"`
+	MaxConcurrent   int `json:"max_concurrent"`
 }
 
 // A Body is a ReadCloser with a static []byte message inside.
@@ -64,32 +63,6 @@ func (b *Body) Close() error {
 	return nil
 }
 
-type Report struct {
-	Duration time.Duration
-	Requests int64
-
-	// Computed
-	QPS float64
-}
-
-func (r *Report) PostProcess() {
-	r.QPS = float64(r.Requests) / float64(r.Duration.Seconds())
-}
-
-var ReportTmpl = template.Must(template.New("report").Parse(
-	`Test duration:            {{printf "%10.3fs" .Duration.Seconds}}
-Successful requests:      {{printf "%10d" .Requests}}
-Mean requests per second: {{printf "%10.3f" .QPS}}`))
-
-func (r *Report) String() string {
-	buf := &bytes.Buffer{}
-	err := ReportTmpl.Execute(buf, r)
-	if err != nil {
-		panic(err)
-	}
-	return buf.String()
-}
-
 func constructRequests(userRequests []*Request) ([]*http.Request, error) {
 	requests := []*http.Request{}
 	for _, userRequest := range userRequests {
@@ -111,42 +84,81 @@ func constructRequests(userRequests []*Request) ([]*http.Request, error) {
 	return requests, nil
 }
 
-func runSingle(transport *http.Transport, request *http.Request, wg *sync.WaitGroup) {
+// Result is the result of doing a single request.
+type Result struct {
+	LatencyMillis float64
+}
+
+func runSingle(transport *http.Transport, request *http.Request) Result {
+	start := time.Now()
 	resp, err := transport.RoundTrip(request)
+	elapsed := time.Since(start)
 	if err != nil {
 		panic(err) // TODO: handle
 	}
 	resp.Body.Close()
-	wg.Done()
+	return Result{float64(elapsed.Seconds() * 1000)}
 }
 
-func runRequests(transport *http.Transport, requests []*http.Request, qps int, duration time.Duration) *Report {
-	ticker := time.NewTicker(time.Second / time.Duration(qps))
-	defer ticker.Stop()
-	timer := time.NewTimer(duration)
-	i := 0 // Current request
-	report := &Report{}
-	start := time.Now()
-	done := make(chan bool)
+type TestParams struct {
+	Transport     *http.Transport
+	Requests      []*http.Request
+	TargetQPS     int
+	Duration      time.Duration
+	MaxConcurrent int
+}
+
+func runRequests(params *TestParams) *Stats {
+	stats := NewStats()
 	wg := &sync.WaitGroup{}
+	ticker := NewPTicker(float64(params.TargetQPS))
+	defer ticker.Stop()
+	timer := time.NewTimer(params.Duration)
+	i := 0 // Current request
+
+	results := make(chan Result)
+	requestCh := make(chan *http.Request)
+	for j := 0; j < params.MaxConcurrent; j++ {
+		go func() {
+			for r := range requestCh {
+				req := *r
+				req.Body = req.Body.(*Body).dup()
+				results <- runSingle(params.Transport, &req)
+				wg.Done()
+			}
+		}()
+	}
+
+	fmt.Println("Starting test...")
+	start := time.Now()
 	for {
 		select {
 		case <-ticker.C:
+			// Send, if a goroutine is ready.
 			wg.Add(1)
-			go func(r *http.Request) {
-				req := *r
-				req.Body = req.Body.(*Body).dup()
-				runSingle(transport, &req, wg)
-				done <- true
-			}(requests[i])
-			i = (i + 1) % len(requests)
-		case <-done:
-			report.Requests++
+			select {
+			case requestCh <- params.Requests[i]:
+				i = (i + 1) % len(params.Requests)
+			default:
+				wg.Done()
+			}
+		case result := <-results:
+			stats.Insert(result.LatencyMillis)
 		case <-timer.C:
-			report.Duration = time.Since(start)
-			// Drain the requests
-			wg.Wait()
-			return report
+			fmt.Println("Test finished. Cleaning up...")
+			stats.Duration = time.Since(start)
+			done := make(chan bool)
+			go func() {
+				wg.Wait()
+				done <- true
+			}()
+			for {
+				select {
+				case <-results: // Drain the requests
+				case <-done:
+					return stats
+				}
+			}
 		}
 	}
 }
@@ -166,6 +178,9 @@ func parseConfig() (*Conf, error) {
 	// Sanity checking
 	if len(conf.Requests) == 0 {
 		return nil, fmt.Errorf("No requests supplied")
+	}
+	if conf.MaxConcurrent == 0 {
+		conf.MaxConcurrent = 100
 	}
 	return conf, nil
 }
@@ -188,7 +203,13 @@ func main() {
 		ResponseHeaderTimeout: 10 * time.Second, // TODO: tunable
 	}
 
-	report := runRequests(transport, requests, conf.QPS, time.Duration(conf.DurationSeconds)*time.Second)
-	report.PostProcess()
-	fmt.Println(report)
+	params := &TestParams{
+		Transport:     transport,
+		Requests:      requests,
+		TargetQPS:     conf.TargetQPS,
+		Duration:      time.Duration(conf.DurationSeconds) * time.Second,
+		MaxConcurrent: conf.MaxConcurrent,
+	}
+	stats := runRequests(params)
+	fmt.Println(stats)
 }

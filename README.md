@@ -6,8 +6,6 @@ Status: Completely WIP. Pre-alpha. Not safe for consumption.
 
 ## TODO
 
-* Randomly choose when to generate requests (Poisson process?) (Instead of having the user choose # of threads
-  and concurrency level, like ab or wrk).
 * Allow the user to ramp up the request rate. For instance, maybe specify start rate, end rate, and number of
   increases.
 * Stats over time with plotinum.
@@ -26,4 +24,5 @@ Status: Completely WIP. Pre-alpha. Not safe for consumption.
   * Expected responses?
 * User-configurable timeout
 * Cancel outstanding requests?
-* Use a goroutine pool to limit outstanding requests when the target server can't keep up.
+* Remove all allocations from the critical (timed) path.
+* Warm-up before test starts

@@ -1,7 +1,8 @@
 {
   "requests": [
-    {"url": "http://localhost:6666", "body": "hello"}
+    {"url": "http://localhost:6666"}
   ],
-  "qps": 100,
-  "duration_seconds": 3
+  "target_qps": 20000,
+  "duration_seconds": 10,
+  "max_concurrent": 100000
 }
