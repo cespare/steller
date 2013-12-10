@@ -10,11 +10,15 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/cespare/gomaxprocs"
 )
 
 var (
 	confFile = flag.String("conf", "conf.json", "JSON configuration file")
 )
+
+func init() { gomaxprocs.SetToNumCPU() }
 
 func fatal(args ...interface{}) {
 	fmt.Println(args...)
@@ -91,15 +95,15 @@ type Result struct {
 	LatencyMillis float64
 }
 
-func runSingle(transport *http.Transport, request *http.Request) Result {
+func runSingle(transport *http.Transport, request *http.Request) *Result {
 	start := time.Now()
 	resp, err := transport.RoundTrip(request)
 	elapsed := time.Since(start)
 	if err != nil {
-		return Result{Failed: true}
+		return &Result{Failed: true}
 	}
 	resp.Body.Close()
-	return Result{
+	return &Result{
 		StatusCode:    resp.StatusCode,
 		LatencyMillis: float64(elapsed.Seconds() * 1000),
 	}
@@ -113,15 +117,15 @@ type TestParams struct {
 	MaxConcurrent int
 }
 
-func runRequests(params *TestParams) *Stats {
-	stats := NewStats()
+func runRequests(params *TestParams) []Breakdown {
+	breakdowns := NewBreakdowns()
 	wg := &sync.WaitGroup{}
 	ticker := NewPTicker(float64(params.TargetQPS))
 	defer ticker.Stop()
 	timer := time.NewTimer(params.Duration)
 	i := 0 // Current request
 
-	results := make(chan Result)
+	results := make(chan *Result)
 	requestCh := make(chan *http.Request)
 	for j := 0; j < params.MaxConcurrent; j++ {
 		go func() {
@@ -148,10 +152,15 @@ func runRequests(params *TestParams) *Stats {
 				wg.Done()
 			}
 		case result := <-results:
-			stats.Insert(result)
+			for _, breakdown := range breakdowns {
+				breakdown.Insert(result)
+			}
 		case <-timer.C:
 			fmt.Println("Test finished. Cleaning up...")
-			stats.Duration = time.Since(start)
+			duration := time.Since(start)
+			for _, breakdown := range breakdowns {
+				breakdown.SetDuration(duration)
+			}
 			done := make(chan bool)
 			go func() {
 				wg.Wait()
@@ -161,7 +170,7 @@ func runRequests(params *TestParams) *Stats {
 				select {
 				case <-results: // Drain the requests
 				case <-done:
-					return stats
+					return breakdowns
 				}
 			}
 		}
@@ -215,6 +224,13 @@ func main() {
 		Duration:      time.Duration(conf.DurationSeconds) * time.Second,
 		MaxConcurrent: conf.MaxConcurrent,
 	}
-	stats := runRequests(params)
-	fmt.Println(stats)
+	breakdowns := runRequests(params)
+
+	fmt.Println()
+	for _, breakdown := range breakdowns {
+		fmt.Printf("***** %s *****\n", breakdown.Description())
+		for _, kv := range breakdown.AllStats() {
+			fmt.Printf("%s\n\n", kv)
+		}
+	}
 }

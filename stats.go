@@ -57,7 +57,7 @@ func (s *Stats) QPS() float64 {
 	return s.Count / float64(s.Duration.Seconds())
 }
 
-func (s *Stats) Insert(r Result) {
+func (s *Stats) Insert(r *Result) {
 	if r.Failed {
 		s.Failed++
 		return
