@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"math"
 	"text/template"
 	"time"
@@ -18,6 +19,7 @@ type Stats struct {
 	quantiles *quantile.Stream
 	Duration  time.Duration
 	Count     float64
+	Failed    int64
 
 	// The rest are in milliseconds
 	Min          float64
@@ -55,8 +57,13 @@ func (s *Stats) QPS() float64 {
 	return s.Count / float64(s.Duration.Seconds())
 }
 
-func (s *Stats) Insert(v float64) {
+func (s *Stats) Insert(r Result) {
+	if r.Failed {
+		s.Failed++
+		return
+	}
 	s.Count++
+	v := r.LatencyMillis
 	if v < s.Min {
 		s.Min = v
 	}
@@ -72,6 +79,7 @@ var StatsTmpl = template.Must(template.New("stats").Parse(
 	`=== Summary ===
 Test duration:            {{printf "%10.3f seconds" .Duration.Seconds}}
 Successful requests:         {{printf "%7.0f" .Count}}
+Failed requests:             {{printf "%7d" .Failed}}
 Mean requests per second: {{printf "%10.3f" .QPS}}
 
 === Request latencies (ms) ===
@@ -83,6 +91,13 @@ Max:            {{printf "%10.3f" .Max}}
 {{end}}`))
 
 func (s *Stats) String() string {
+	if s.Count == 0 {
+		if s.Failed == 0 {
+			return fmt.Sprintf("WARNING: no requests made.")
+		}
+		return fmt.Sprintf("WARNING: all requests (%d) failed. Is the target server accepting requests?",
+			s.Failed)
+	}
 	buf := &bytes.Buffer{}
 	err := StatsTmpl.Execute(buf, s)
 	if err != nil {

@@ -86,6 +86,8 @@ func constructRequests(userRequests []*Request) ([]*http.Request, error) {
 
 // Result is the result of doing a single request.
 type Result struct {
+	Failed        bool // Could not round-trip the request at all
+	StatusCode    int
 	LatencyMillis float64
 }
 
@@ -94,10 +96,13 @@ func runSingle(transport *http.Transport, request *http.Request) Result {
 	resp, err := transport.RoundTrip(request)
 	elapsed := time.Since(start)
 	if err != nil {
-		panic(err) // TODO: handle
+		return Result{Failed: true}
 	}
 	resp.Body.Close()
-	return Result{float64(elapsed.Seconds() * 1000)}
+	return Result{
+		StatusCode:    resp.StatusCode,
+		LatencyMillis: float64(elapsed.Seconds() * 1000),
+	}
 }
 
 type TestParams struct {
@@ -143,7 +148,7 @@ func runRequests(params *TestParams) *Stats {
 				wg.Done()
 			}
 		case result := <-results:
-			stats.Insert(result.LatencyMillis)
+			stats.Insert(result)
 		case <-timer.C:
 			fmt.Println("Test finished. Cleaning up...")
 			stats.Duration = time.Since(start)
