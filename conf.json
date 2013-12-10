@@ -3,6 +3,6 @@
     {"url": "http://localhost:6666"}
   ],
   "target_qps": 1000,
-  "duration_seconds": 2,
+  "duration_seconds": 10,
   "max_concurrent": 10000
 }

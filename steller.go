@@ -227,6 +227,15 @@ func main() {
 	breakdowns := runRequests(params)
 
 	fmt.Println()
+	// Sanity check first
+	total := breakdowns[0].AllStats()[0]
+	if total.Count == 0 {
+		if total.Failed == 0 {
+			fmt.Println("ERROR: no requests made.")
+		}
+		fmt.Printf("ERROR: all requests (%.0f) failed. Is the target server accepting requests?\n", total.Failed)
+		return
+	}
 	for _, breakdown := range breakdowns {
 		fmt.Printf("***** %s *****\n", breakdown.Description())
 		for _, kv := range breakdown.AllStats() {

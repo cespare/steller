@@ -50,6 +50,9 @@ func (b StatusCodeBreakdown) AllStats() BreakdownKeyVals {
 }
 
 func (b StatusCodeBreakdown) Insert(r *Result) {
+	if r.Failed {
+		return
+	}
 	stats, ok := b[r.StatusCode]
 	if !ok {
 		stats = NewStats()
