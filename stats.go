@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"math"
 	"text/template"
-	"time"
 
 	"github.com/bmizerany/perks/quantile"
 )
@@ -16,9 +15,7 @@ var (
 
 type Stats struct {
 	quantiles *quantile.Stream
-	Duration  time.Duration
 	Count     float64
-	Failed    float64
 
 	// The rest are in milliseconds
 	Min          float64
@@ -52,15 +49,7 @@ func (s *Stats) Quantiles() [][2]float64 {
 	return result
 }
 
-func (s *Stats) QPS() float64 {
-	return s.Count / float64(s.Duration.Seconds())
-}
-
 func (s *Stats) Insert(r *Result) {
-	if r.Failed {
-		s.Failed++
-		return
-	}
 	s.Count++
 	v := r.LatencyMillis
 	if v < s.Min {
@@ -74,28 +63,17 @@ func (s *Stats) Insert(r *Result) {
 	s.quantiles.Insert(v)
 }
 
-func (s *Stats) PercentSuccessful() float64 { return s.Count / (s.Count + s.Failed) * 100 }
-func (s *Stats) PercentFailed() float64 { return s.Failed / (s.Count + s.Failed) * 100 }
-
 var StatsTmpl = template.Must(template.New("stats").Parse(
-	`=== Summary ===
-Test duration:            {{printf "%10.3f seconds" .Duration.Seconds}}
-Successful requests:         {{printf "%7.0f" .Count}} ({{printf "%.1f%%" .PercentSuccessful}})
-Failed requests:             {{printf "%7.0f" .Failed}} ({{printf "%.1f%%" .PercentFailed}})
-Mean requests per second: {{printf "%10.3f" .QPS}}
-
-=== Request latencies (ms) ===
-Mean:           {{printf "%10.3f" .Mean}}
-Std. Deviation: {{printf "%10.3f" .StdDev}}
-Min:            {{printf "%10.3f" .Min}}
-Max:            {{printf "%10.3f" .Max}}
-{{range .Quantiles}}Quantile {{index . 0 | printf "%0.3f"}}: {{index . 1 | printf "%10.3f"}}
+	`Mean:           {{printf "%10.3f" .Mean}} ms
+Std. Deviation: {{printf "%10.3f" .StdDev}} ms
+Min:            {{printf "%10.3f" .Min}} ms
+Max:            {{printf "%10.3f" .Max}} ms
+{{range .Quantiles}}Quantile {{index . 0 | printf "%0.3f"}}: {{index . 1 | printf "%10.3f"}} ms
 {{end}}`))
 
 func (s *Stats) String() string {
 	buf := &bytes.Buffer{}
-	err := StatsTmpl.Execute(buf, s)
-	if err != nil {
+	if err := StatsTmpl.Execute(buf, s); err != nil {
 		panic(err)
 	}
 	return buf.String()

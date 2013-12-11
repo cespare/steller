@@ -8,8 +8,8 @@ import (
 
 const (
 	addr          = "localhost:6666"
-	delay         = 10 * time.Millisecond
-	maxConcurrent = 100
+	delay         = 1000 * time.Millisecond
+	maxConcurrent = 1
 )
 
 var (

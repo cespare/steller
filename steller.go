@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
@@ -23,21 +22,6 @@ func init() { gomaxprocs.SetToNumCPU() }
 func fatal(args ...interface{}) {
 	fmt.Println(args...)
 	os.Exit(1)
-}
-
-// A Request is a user-configured request (which can be used to make an http.Request).
-type Request struct {
-	Method  string
-	URL     string
-	Body    string
-	Headers map[string]string
-}
-
-type Conf struct {
-	Requests        []*Request
-	TargetQPS       int `json:"target_qps"`
-	DurationSeconds int `json:"duration_seconds"`
-	MaxConcurrent   int `json:"max_concurrent"`
 }
 
 // A Body is a ReadCloser with a static []byte message inside.
@@ -76,11 +60,15 @@ func constructRequests(userRequests []*Request) ([]*http.Request, error) {
 		}
 		// The returned request needs to be copied and have its Body swapped out for a duplicate whenever the
 		// request is going to be used.
+		header := make(http.Header)
+		for k, v := range userRequest.Headers {
+			header.Set(k, v)
+		}
 		req := &http.Request{
 			Method:        userRequest.Method,
 			URL:           u,
 			Body:          newBody([]byte(userRequest.Body)),
-			Header:        make(http.Header), // http.Transport doesn't like a nil header
+			Header:        header,
 			ContentLength: int64(len(userRequest.Body)),
 		}
 		requests = append(requests, req)
@@ -117,8 +105,8 @@ type TestParams struct {
 	MaxConcurrent int
 }
 
-func runRequests(params *TestParams) []Breakdown {
-	breakdowns := NewBreakdowns()
+func runRequests(params *TestParams) *ResultStats {
+	resultStats := NewResultStats()
 	wg := &sync.WaitGroup{}
 	ticker := NewPTicker(float64(params.TargetQPS))
 	defer ticker.Stop()
@@ -127,13 +115,35 @@ func runRequests(params *TestParams) []Breakdown {
 
 	results := make(chan *Result)
 	requestCh := make(chan *http.Request)
+	cancel := make(chan bool)
 	for j := 0; j < params.MaxConcurrent; j++ {
 		go func() {
+			// Each of the goroutines spawns a partner goroutine that actually makes the request. This way the
+			// primary goroutine of the pair can cancel outstanding requests.
+			requests := make(chan *http.Request)
+			defer func() { close(requests) }()
+			go func() {
+				for r := range requests {
+					results <- runSingle(params.Transport, r)
+					wg.Done()
+				}
+			}()
+			var currentRequest *http.Request
 			for r := range requestCh {
 				req := *r
 				req.Body = req.Body.(*Body).dup()
-				results <- runSingle(params.Transport, &req)
-				wg.Done()
+				select {
+				case requests <- &req:
+					currentRequest = &req
+				case <-cancel:
+					if currentRequest != nil {
+						// Cancel the outstanding request
+						params.Transport.CancelRequest(currentRequest)
+						// Not going to send the current request
+						wg.Done()
+						return
+					}
+				}
 			}
 		}()
 	}
@@ -152,51 +162,26 @@ func runRequests(params *TestParams) []Breakdown {
 				wg.Done()
 			}
 		case result := <-results:
-			for _, breakdown := range breakdowns {
-				breakdown.Insert(result)
-			}
+			resultStats.Insert(result)
 		case <-timer.C:
 			fmt.Println("Test finished. Cleaning up...")
-			duration := time.Since(start)
-			for _, breakdown := range breakdowns {
-				breakdown.SetDuration(duration)
-			}
+			resultStats.Duration = time.Since(start)
 			done := make(chan bool)
 			go func() {
 				wg.Wait()
 				done <- true
 			}()
+			close(requestCh)
 			for {
 				select {
-				case <-results: // Drain the requests
+				case <-results: // Drain responses
+				case cancel <- true: // Cancel outstanding requests
 				case <-done:
-					return breakdowns
+					return resultStats
 				}
 			}
 		}
 	}
-}
-
-func parseConfig() (*Conf, error) {
-	flag.Parse()
-	conf := &Conf{}
-	f, err := os.Open(*confFile)
-	if err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(f)
-	if err := decoder.Decode(conf); err != nil {
-		return nil, err
-	}
-
-	// Sanity checking
-	if len(conf.Requests) == 0 {
-		return nil, fmt.Errorf("No requests supplied")
-	}
-	if conf.MaxConcurrent == 0 {
-		conf.MaxConcurrent = 100
-	}
-	return conf, nil
 }
 
 func main() {
@@ -224,22 +209,17 @@ func main() {
 		Duration:      time.Duration(conf.DurationSeconds) * time.Second,
 		MaxConcurrent: conf.MaxConcurrent,
 	}
-	breakdowns := runRequests(params)
+	results := runRequests(params)
 
 	fmt.Println()
 	// Sanity check first
-	total := breakdowns[0].AllStats()[0]
-	if total.Count == 0 {
-		if total.Failed == 0 {
+	if results.Succeeded == 0 {
+		if results.Failed == 0 {
 			fmt.Println("ERROR: no requests made.")
 		}
-		fmt.Printf("ERROR: all requests (%.0f) failed. Is the target server accepting requests?\n", total.Failed)
+		fmt.Printf("ERROR: all requests (%.0f) failed. Is the target server accepting requests?\n",
+			results.Failed)
 		return
 	}
-	for _, breakdown := range breakdowns {
-		fmt.Printf("***** %s *****\n", breakdown.Description())
-		for _, kv := range breakdown.AllStats() {
-			fmt.Printf("%s\n\n", kv)
-		}
-	}
+	fmt.Println(results)
 }
