@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"sort"
 )
 
 // A Request is a user-configured request (which can be used to make an http.Request).
@@ -17,12 +18,18 @@ type Request struct {
 	Headers  map[string]string
 }
 
+type ReportingStats struct {
+	Quantiles []float64
+	Buckets   []float64
+}
+
 type Conf struct {
 	Requests        []*Request
-	RequestsFile    string `json:"requests_file"`
-	TargetQPS       int    `json:"target_qps"`
-	DurationSeconds int    `json:"duration_seconds"`
-	MaxConcurrent   int    `json:"max_concurrent"`
+	RequestsFile    string          `json:"requests_file"`
+	TargetQPS       int             `json:"target_qps"`
+	DurationSeconds int             `json:"duration_seconds"`
+	MaxConcurrent   int             `json:"max_concurrent"`
+	ReportingStats  *ReportingStats `json:"reporting_stats"`
 }
 
 func parseConfig() (*Conf, error) {
@@ -67,6 +74,28 @@ func parseConfig() (*Conf, error) {
 	}
 	if conf.MaxConcurrent == 0 {
 		conf.MaxConcurrent = 100
+	}
+
+	if conf.ReportingStats != nil {
+		sort.Float64s(conf.ReportingStats.Quantiles)
+		sort.Float64s(conf.ReportingStats.Buckets)
+		for _, q := range conf.ReportingStats.Quantiles {
+			if q < 0 || q >= 1 {
+				return nil, fmt.Errorf("Bad quantile %f", q)
+			}
+		}
+		if len(conf.ReportingStats.Buckets) > 0 {
+			last := conf.ReportingStats.Buckets[0]
+			for i, b := range conf.ReportingStats.Buckets {
+				if b <= 0 {
+					return nil, fmt.Errorf("Bucket is <= 0: %f", b)
+				}
+				if i > 0 && b == last {
+					return nil, fmt.Errorf("Duplicate buckets: %f", b)
+				}
+				last = b
+			}
+		}
 	}
 	return conf, nil
 }

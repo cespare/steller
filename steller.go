@@ -189,6 +189,14 @@ func main() {
 	if err != nil {
 		fatal(fmt.Sprintf("Config error: %s", err))
 	}
+	if conf.ReportingStats != nil {
+		if conf.ReportingStats.Buckets != nil {
+			buckets = conf.ReportingStats.Buckets
+		}
+		if conf.ReportingStats.Quantiles != nil {
+			quants = conf.ReportingStats.Quantiles
+		}
+	}
 
 	requests, err := constructRequests(conf.Requests)
 	if err != nil {
@@ -216,9 +224,10 @@ func main() {
 	if results.Succeeded == 0 {
 		if results.Failed == 0 {
 			fmt.Println("ERROR: no requests made.")
+		} else {
+			fmt.Printf("ERROR: all requests (%d) failed. Is the target server accepting requests?\n",
+				results.Failed)
 		}
-		fmt.Printf("ERROR: all requests (%.0f) failed. Is the target server accepting requests?\n",
-			results.Failed)
 		return
 	}
 	fmt.Println(results)
