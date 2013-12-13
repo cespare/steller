@@ -51,8 +51,8 @@ func (b *Body) Close() error {
 	return nil
 }
 
-func constructRequests(userRequests []*Request) ([]*http.Request, error) {
-	requests := []*http.Request{}
+func constructRequests(userRequests []*Request) (*WeightedRequests, error) {
+	requests := []WeightedRequest{}
 	for _, userRequest := range userRequests {
 		u, err := url.Parse(userRequest.URL)
 		if err != nil {
@@ -64,16 +64,19 @@ func constructRequests(userRequests []*Request) ([]*http.Request, error) {
 		for k, v := range userRequest.Headers {
 			header.Set(k, v)
 		}
-		req := &http.Request{
-			Method:        userRequest.Method,
-			URL:           u,
-			Body:          newBody([]byte(userRequest.Body)),
-			Header:        header,
-			ContentLength: int64(len(userRequest.Body)),
+		req := WeightedRequest{
+			Weight: userRequest.Weight,
+			Request: &http.Request{
+				Method:        userRequest.Method,
+				URL:           u,
+				Body:          newBody([]byte(userRequest.Body)),
+				Header:        header,
+				ContentLength: int64(len(userRequest.Body)),
+			},
 		}
 		requests = append(requests, req)
 	}
-	return requests, nil
+	return NewWeightedRequests(requests), nil
 }
 
 // Result is the result of doing a single request.
@@ -99,7 +102,7 @@ func runSingle(transport *http.Transport, request *http.Request) *Result {
 
 type TestParams struct {
 	Transport     *http.Transport
-	Requests      []*http.Request
+	Requests      *WeightedRequests
 	TargetQPS     int
 	Duration      time.Duration
 	MaxConcurrent int
@@ -111,7 +114,6 @@ func runRequests(params *TestParams) *ResultStats {
 	ticker := NewPTicker(float64(params.TargetQPS))
 	defer ticker.Stop()
 	timer := time.NewTimer(params.Duration)
-	i := 0 // Current request
 
 	results := make(chan *Result)
 	requestCh := make(chan *http.Request)
@@ -156,8 +158,7 @@ func runRequests(params *TestParams) *ResultStats {
 			// Send, if a goroutine is ready.
 			wg.Add(1)
 			select {
-			case requestCh <- params.Requests[i]:
-				i = (i + 1) % len(params.Requests)
+			case requestCh <- params.Requests.Random():
 			default:
 				wg.Done()
 			}

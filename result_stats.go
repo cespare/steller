@@ -77,7 +77,7 @@ var ResultStatsTmpl = template.Must(template.New("ResultStats").Funcs(resultStat
 ║{{range $status, $_ := .ByStatus}}
 ║ ┌──┤ Status {{$status}} ({{.Count}} req | {{divpct .Count $.Succeeded | printf "%.1f"}}% of total)
 {{indent .String "║ │ "}}
-{{end}}║ └
+║ └{{end}}
 ╚═`))
 
 func (s *ResultStats) String() string {

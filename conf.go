@@ -16,6 +16,7 @@ type Request struct {
 	Body     string
 	BodyFile string `json:"body_file"`
 	Headers  map[string]string
+	Weight   float64
 }
 
 type ReportingStats struct {
@@ -56,6 +57,11 @@ func parseConfig() (*Conf, error) {
 			return nil, fmt.Errorf("Cannot parse json requests file %s: %s", conf.RequestsFile, err)
 		}
 		conf.Requests = append(conf.Requests, requests...)
+	}
+	for _, request := range conf.Requests {
+		if request.Weight == 0 {
+			request.Weight = 1
+		}
 	}
 	if len(conf.Requests) == 0 {
 		return nil, fmt.Errorf("No requests supplied")

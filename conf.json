@@ -1,15 +1,17 @@
 {
   "requests": [
     {
-      "url": "http://localhost:6666",
+      "url": "http://localhost:8080",
       "method": "POST",
-    }
+      "body_file": "body.json",
+      "headers": { "Content-Type": "application/json" }
+    },
   ],
   "target_qps": 1000,
-  "duration_seconds": 2,
-  "max_concurrent": 500,
+  "duration_seconds": 30,
+  "max_concurrent": 20,
   "reporting_stats": {
     "quantiles": [0.25, 0.5, 0.75, 0.9, 0.95, 0.99],
-    "buckets": [10, 100, 500]
+    "buckets": [50, 150]
   }
 }
