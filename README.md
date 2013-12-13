@@ -4,6 +4,17 @@ Steller is an HTTP benchmarking tool.
 
 Status: Completely WIP. Pre-alpha. Not safe for consumption.
 
+## Notes about the configuration format
+
+* It's JSON -- see conf.json for an example
+* Requests are chosen randomly from the list. Use `"weight"` in each URL to weight the probabilities.
+* Requests can be in the configuration and/or in a separate file. Use `"requests_file"` to specify the
+  filename.
+* The body of the request can be given with `"body"`, or in a separate file using `"body_file"`.
+* `"target_qps"` is an integer, or else `"unlimited"` to have each worker make requests as quickly as
+  possible.
+* Use `"reporting_stats"` to specify quantile divisions and latency bucket breakdowns.
+
 ## TODO
 
 * Allow the user to ramp up the request rate. For instance, maybe specify start rate, end rate, and number of

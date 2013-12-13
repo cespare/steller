@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -24,13 +25,30 @@ type ReportingStats struct {
 	Buckets   []float64
 }
 
+type TargetQPS struct {
+	unlimited bool
+	qps int
+}
+
 type Conf struct {
 	Requests        []*Request
 	RequestsFile    string          `json:"requests_file"`
-	TargetQPS       int             `json:"target_qps"`
+	TargetQPS       TargetQPS       `json:"target_qps"`
 	DurationSeconds int             `json:"duration_seconds"`
 	MaxConcurrent   int             `json:"max_concurrent"`
 	ReportingStats  *ReportingStats `json:"reporting_stats"`
+}
+
+func (q *TargetQPS) UnmarshalJSON(b []byte) error {
+	if bytes.Equal(b, []byte(`"unlimited"`)) {
+		q.unlimited = true
+		return nil
+	}
+	q.unlimited = false
+	if err := json.Unmarshal(b, &q.qps); err != nil {
+		return err
+	}
+	return nil
 }
 
 func parseConfig() (*Conf, error) {

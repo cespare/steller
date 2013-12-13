@@ -103,7 +103,7 @@ func runSingle(transport *http.Transport, request *http.Request) *Result {
 type TestParams struct {
 	Transport     *http.Transport
 	Requests      *WeightedRequests
-	TargetQPS     int
+	TargetQPS     TargetQPS
 	Duration      time.Duration
 	MaxConcurrent int
 }
@@ -111,8 +111,25 @@ type TestParams struct {
 func runRequests(params *TestParams) *ResultStats {
 	resultStats := NewResultStats()
 	wg := &sync.WaitGroup{}
-	ticker := NewPTicker(float64(params.TargetQPS))
-	defer ticker.Stop()
+	var ticks chan struct{}
+	if params.TargetQPS.unlimited {
+		ticks = make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			for {
+				select {
+				case ticks <- struct{}{}:
+				case <-done:
+					return
+				}
+			}
+		}()
+		defer func() { done <- struct{}{} }()
+	} else {
+		ticker := NewPTicker(float64(params.TargetQPS.qps))
+		defer ticker.Stop()
+		ticks = ticker.C
+	}
 	timer := time.NewTimer(params.Duration)
 
 	results := make(chan *Result)
@@ -154,7 +171,7 @@ func runRequests(params *TestParams) *ResultStats {
 	start := time.Now()
 	for {
 		select {
-		case <-ticker.C:
+		case <-ticks:
 			// Send, if a goroutine is ready.
 			wg.Add(1)
 			select {
