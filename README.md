@@ -17,12 +17,6 @@ Status: Completely WIP. Pre-alpha. Not safe for consumption.
 * Give expected responses?
 * User-configurable timeout
 * Remove all allocations from the critical (timed) path. Call `runtime.GC()` before timing starts.
-* Warm-up before test starts
+* Warmup before test starts
 * Handle passing multiple different hosts? (This should probably not work.)
 * Write comparisons to ab, wrk, siege, jmeter, tsung
-
-## Measurements
-
-* qps over time
-  - broken down by success vs. failure
-  - successful requests broken down by status code

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"text/template"
+	"time"
 
 	"github.com/bmizerany/perks/quantile"
 )
@@ -23,7 +24,8 @@ type Stats struct {
 	Count     float64
 	// This has len(buckets) + 1 counts, unless buckets is empty in which case we don't record a single trivial
 	// bucket.
-	buckets []float64
+	buckets  []float64
+	Duration time.Duration // Only used for printing -- filled in by parent ResultStats
 
 	// The rest are in milliseconds
 	Min          float64
@@ -118,7 +120,7 @@ func (s *Stats) Insert(r *Result) {
 	}
 }
 
-var StatsTmpl = template.Must(template.New("stats").Parse(
+var StatsTmpl = template.Must(template.New("stats").Funcs(resultStatsFuncs).Parse(
 	`Mean           {{printf "%10.3f" .Mean}} ms
 Std. Deviation {{printf "%10.3f" .StdDev}} ms
 Min            {{printf "%10.3f" .Min}} ms
@@ -126,7 +128,7 @@ Max            {{printf "%10.3f" .Max}} ms
 {{range .Quantiles}}Quantile {{index . 0 | printf "%0.3f"}} {{index . 1 | printf "%10.3f"}} ms
 {{end}}
 {{if $buckets := .BucketsPercents}}Latency bucket counts
-{{range $bucket := $buckets}}{{printf "%-20s" .Description}} {{printf "%7.0f" .Count}} ({{printf "%.1f" .Percent}}%)
+{{range $bucket := $buckets}}{{printf "%-20s" .Description}}   {{printf "%6.0f" .Count}}   {{printf "%3.1f" .Percent}}%   {{div .Count $.Duration.Seconds | printf "%9.3f"}} req/s
 {{end}}{{end}}`))
 
 func (s *Stats) String() string {

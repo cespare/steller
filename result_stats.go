@@ -57,16 +57,17 @@ func indent(s, prefix string) string {
 }
 
 var resultStatsFuncs = template.FuncMap{
+	"div":    func(n, d float64) float64 { return n / d },
 	"divpct": func(a float64, b int64) float64 { return a / float64(b) * 100 },
 	"indent": indent,
 }
 
 var ResultStatsTmpl = template.Must(template.New("ResultStats").Funcs(resultStatsFuncs).Parse(
 	`╔══╡ Summary
-║ Test duration:           {{printf "%10.3f" .Duration.Seconds}} sec
-║ Successful requests:        {{printf "%7d" .Succeeded}} ({{printf "%.1f%%" .PercentSuccessful}})
-║ Failed requests:            {{printf "%7d" .Failed}} ({{printf "%.1f%%" .PercentFailed}})
-║ Successful request rate: {{printf "%10.3f" .QPS}} req / sec
+║ Test duration:           {{printf "%9.3f" .Duration.Seconds}} s
+║ Successful requests:        {{printf "%6d" .Succeeded}} ({{printf "%.1f%%" .PercentSuccessful}})
+║ Failed requests:            {{printf "%6d" .Failed}} ({{printf "%.1f%%" .PercentFailed}})
+║ Successful request rate: {{printf "%9.3f" .QPS}} req/s
 ╚═
 
 ╔══╡ Overall latencies
@@ -75,12 +76,16 @@ var ResultStatsTmpl = template.Must(template.New("ResultStats").Funcs(resultStat
 
 ╔══╡ Breakdown by response status code
 ║{{range $status, $_ := .ByStatus}}
-║ ┌──┤ Status {{$status}} ({{.Count}} req | {{divpct .Count $.Succeeded | printf "%.1f"}}% of total)
+║ ┌──┤ Status {{$status}} ({{.Count}} req | {{divpct .Count $.Succeeded | printf "%.1f"}}% of total | {{div .Count $.Duration.Seconds | printf "%.3f"}} req/s)
 {{indent .String "║ │ "}}
 ║ └{{end}}
 ╚═`))
 
 func (s *ResultStats) String() string {
+	s.Total.Duration = s.Duration
+	for _, stat := range s.ByStatus {
+		stat.Duration = s.Duration
+	}
 	buf := &bytes.Buffer{}
 	if err := ResultStatsTmpl.Execute(buf, s); err != nil {
 		panic(err)
