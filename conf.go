@@ -71,7 +71,7 @@ func parseConfig() (*Conf, error) {
 		}
 		reqDecoder := json.NewDecoder(reqFile)
 		requests := []*Request{}
-		if err := reqDecoder.Decode(requests); err != nil {
+		if err := reqDecoder.Decode(&requests); err != nil {
 			return nil, fmt.Errorf("Cannot parse json requests file %s: %s", conf.RequestsFile, err)
 		}
 		conf.Requests = append(conf.Requests, requests...)
