@@ -65,7 +65,7 @@ func constructRequests(userRequests []*Request) (*WeightedRequests, error) {
 			header.Set(k, v)
 		}
 		req := WeightedRequest{
-			Weight: userRequest.Weight,
+			Weight: *userRequest.Weight,
 			Request: &http.Request{
 				Method:        userRequest.Method,
 				URL:           u,

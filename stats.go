@@ -128,7 +128,7 @@ Max            {{printf "%10.3f" .Max}} ms
 {{range .Quantiles}}Quantile {{index . 0 | printf "%0.3f"}} {{index . 1 | printf "%10.3f"}} ms
 {{end}}
 {{if $buckets := .BucketsPercents}}Latency bucket counts
-{{range $bucket := $buckets}}{{printf "%-20s" .Description}}   {{printf "%6.0f" .Count}}   {{printf "%3.1f" .Percent}}%   {{div .Count $.Duration.Seconds | printf "%9.3f"}} req/s
+{{range $bucket := $buckets}}{{printf "%-20s" .Description}}   {{printf "%6.0f" .Count}}   {{printf "%5.1f" .Percent}}%   {{div .Count $.Duration.Seconds | printf "%9.3f"}} req/s
 {{end}}{{end}}`))
 
 func (s *Stats) String() string {

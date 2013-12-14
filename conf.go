@@ -17,7 +17,7 @@ type Request struct {
 	Body     string
 	BodyFile string `json:"body_file"`
 	Headers  map[string]string
-	Weight   float64
+	Weight   *float64 // Pointer to distinguish whether the user provided the number or not
 }
 
 type ReportingStats struct {
@@ -27,7 +27,7 @@ type ReportingStats struct {
 
 type TargetQPS struct {
 	unlimited bool
-	qps int
+	qps       int
 }
 
 type Conf struct {
@@ -77,8 +77,9 @@ func parseConfig() (*Conf, error) {
 		conf.Requests = append(conf.Requests, requests...)
 	}
 	for _, request := range conf.Requests {
-		if request.Weight == 0 {
-			request.Weight = 1
+		if request.Weight == nil {
+			request.Weight = new(float64)
+			*request.Weight = 1
 		}
 	}
 	if len(conf.Requests) == 0 {
