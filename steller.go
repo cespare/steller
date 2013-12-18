@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
@@ -93,6 +94,7 @@ func runSingle(transport *http.Transport, request *http.Request) *Result {
 	if err != nil {
 		return &Result{Failed: true}
 	}
+	io.Copy(ioutil.Discard, resp.Body) // This is necessary to keep the TCP connection alive.
 	resp.Body.Close()
 	return &Result{
 		StatusCode:    resp.StatusCode,
