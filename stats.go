@@ -7,7 +7,7 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/bmizerany/perks/quantile"
+	"github.com/cespare/perks/quantile"
 )
 
 const quantileEpsilon = 0.001
